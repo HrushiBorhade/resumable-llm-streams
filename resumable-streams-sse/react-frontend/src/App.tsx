@@ -7,39 +7,121 @@ import { Textarea } from "./components/ui/textarea";
 import { Badge } from "./components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { AlertCircle, Info } from "lucide-react";
-import { ModeToggle } from "./components/theme";
+
+// Configuration for resumable streaming
+const STORAGE_KEY = "sse_stream_state";
+const API_BASE_URL = "http://localhost:3000";
+
+// Type definitions for stream state
+interface StreamState {
+  content: string;
+  prompt: string;
+  status: "idle" | "streaming" | "complete" | "error";
+  lastEventId: string;
+  error?: string;
+}
 
 export default function App() {
   const [tab, setTab] = useState("chat");
   const [prompt, setPrompt] = useState("");
-
+  
+  // Main streaming state
   const [content, setContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState("");
+  const [lastEventId, setLastEventId] = useState("");
+  
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const handleStartStream = () => {
-    setContent("");
+  // Load previous stream state on component mount
+  useEffect(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    
+    if (savedState) {
+      try {
+        const parsedState = JSON.parse(savedState) as StreamState;
+        
+        setContent(parsedState.content);
+        setPrompt(parsedState.prompt);
+        setLastEventId(parsedState.lastEventId || "");
+        
+        if (parsedState.status === "streaming") {
+          // If we were streaming before, attempt to resume
+          setTimeout(() => {
+            handleStartStream(parsedState.prompt, parsedState.lastEventId);
+          }, 100);
+        } else if (parsedState.status === "error") {
+          setError(parsedState.error || "Unknown error");
+        }
+      } catch (e) {
+        console.error("Error parsing saved stream state:", e);
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+  }, []);
+
+  // Save current stream state whenever key values change
+  useEffect(() => {
+    const currentState: StreamState = {
+      content,
+      prompt,
+      status: isStreaming ? "streaming" : error ? "error" : content ? "complete" : "idle",
+      lastEventId,
+      error: error || undefined
+    };
+    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentState));
+  }, [content, prompt, isStreaming, error, lastEventId]);
+
+  const handleStartStream = (userPrompt = prompt, resumeFromId = "") => {
+    // If no prompt is set and we're not resuming, don't do anything
+    if (!userPrompt && !resumeFromId) return;
+    
+    // Set UI state
     setIsStreaming(true);
     setError("");
+    
+    // If not resuming, clear previous content
+    if (!resumeFromId) {
+      setContent("");
+      setLastEventId("");
+    }
+    
+    // Close existing EventSource if any
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
 
     try {
-      const params = new URLSearchParams({
-        topic: prompt ?? "Server sent events",
-      });
-      const es = new EventSource(`http://localhost:3000/ai/stream?${params}`);
+      // Create URL with prompt as query parameter
+      // Create URL with prompt as query parameter
+      const url = new URL(`${API_BASE_URL}/ai/stream`);
+      url.searchParams.append("topic", userPrompt);
+      
+      // Add lastEventId to the URL if resuming
+      if (resumeFromId) {
+        url.searchParams.append("lastEventId", resumeFromId);
+      }
+      
+      // Create new EventSource with the complete URL
+      const es = new EventSource(url.toString());
+      
+      
       eventSourceRef.current = es;
 
       es.onopen = (e: Event): void => {
         console.log("SSE Connection Opened", e);
       };
+      
       es.onmessage = (event: MessageEvent): void => {
         const message = event.data as string;
+        
+        // Store last event ID for resuming
+        if (event.lastEventId) {
+          setLastEventId(event.lastEventId);
+        }
 
         // Check for special messages
         if (message === "[STREAM-COMPLETE]") {
@@ -64,15 +146,21 @@ export default function App() {
 
       es.onerror = (event: Event): void => {
         console.error("SSE error:", event);
-        setError("SSE connection error");
-        es.close();
-        setIsStreaming(false);
+        // Don't immediately set error - allow reconnection attempts
+        setTimeout(() => {
+          if (es.readyState === EventSource.CLOSED) {
+            setError("SSE connection error - reconnection failed");
+            setIsStreaming(false);
+          }
+        }, 5000); // Wait 5 seconds for potential reconnection
       };
     } catch (error) {
       setError(error instanceof Error ? error.message : "Unknown error");
+      setIsStreaming(false);
     }
   };
 
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
@@ -82,6 +170,7 @@ export default function App() {
     };
   }, []);
 
+  // Auto-scroll effect
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
@@ -89,7 +178,7 @@ export default function App() {
   }, [content]);
 
   return (
-    <div className="container mx-auto p-4 h-screen flex flex-col relative">
+    <div className="container mx-auto p-4 h-screen flex flex-col">
       <header className="py-4">
         <h1 className="text-2xl font-bold">Resumable LLM Streaming Demo</h1>
         <p className="text-gray-500">
@@ -105,26 +194,26 @@ export default function App() {
           <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="chat" className="flex-1 p-4 flex flex-col gap-2">
-          {/* <Chat /> */}
-
-          <Input
-            placeholder="Enter a topic e.g - Server Side Events"
-            value={prompt}
-            className="font-mono"
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-          <Button
-            onClick={handleStartStream}
-            disabled={isStreaming}
-            className="w-full"
-            variant="default"
-          >
-            {isStreaming ? "SSE Streaming..." : "Start SSE Stream"}
-            {isStreaming && (
-              <span className="ml-2 h-2 w-2 rounded-full bg-white animate-pulse"></span>
-            )}
-          </Button>
+        <TabsContent value="chat" className="flex-1 p-4">
+          <div className="flex gap-2 mb-4">
+            <Input 
+              value={prompt} 
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Enter your prompt here..."
+              className="flex-1"
+            />
+            <Button
+              onClick={() => handleStartStream()}
+              disabled={isStreaming || !prompt}
+              variant="default"
+            >
+              {isStreaming ? "Streaming..." : "Start Stream"}
+              {isStreaming && (
+                <span className="ml-2 h-2 w-2 rounded-full bg-white animate-pulse"></span>
+              )}
+            </Button>
+          </div>
+          
           <div className="relative">
             <Textarea
               ref={textareaRef}
@@ -143,8 +232,9 @@ export default function App() {
               </Badge>
             )}
           </div>
+          
           {error && (
-            <Alert variant="destructive" className="w-full">
+            <Alert variant="destructive" className="w-full mt-4">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Error</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
@@ -152,7 +242,7 @@ export default function App() {
           )}
 
           {!error && !isStreaming && content && (
-            <div className="text-sm text-muted-foreground w-full flex items-center gap-2">
+            <div className="text-sm text-muted-foreground w-full flex items-center gap-2 mt-2">
               <Info className="h-4 w-4" />
               SSE streaming complete
             </div>
@@ -174,6 +264,20 @@ export default function App() {
                 add settings for model parameters here.
               </p>
             </div>
+            
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                localStorage.removeItem(STORAGE_KEY);
+                setContent("");
+                setPrompt("");
+                setError("");
+                setLastEventId("");
+                setIsStreaming(false);
+              }}
+            >
+              Clear Saved State
+            </Button>
           </div>
         </TabsContent>
 
@@ -185,16 +289,14 @@ export default function App() {
               <li>Node.js + Express backend</li>
               <li>React + TypeScript frontend</li>
               <li>Server-Sent Events (SSE) for streaming</li>
-              <li>localStorage to persist session IDs</li>
+              <li>localStorage to persist stream state</li>
               <li>Event IDs to track streaming progress</li>
+              <li>Automatic reconnection and resumption</li>
             </ul>
             <Button onClick={() => setTab("chat")}>Back to Chat</Button>
           </div>
         </TabsContent>
       </Tabs>
-      <div className="absolute top-5 right-5">
-        <ModeToggle />
-      </div>
     </div>
   );
 }
