@@ -1,6 +1,5 @@
 // src/App.tsx
 import { useEffect, useRef, useState } from "react";
-// import { Chat } from './components/Chat';
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "./components/ui/input";
@@ -8,6 +7,7 @@ import { Textarea } from "./components/ui/textarea";
 import { Badge } from "./components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { AlertCircle, Info } from "lucide-react";
+import { ModeToggle } from "./components/theme";
 
 export default function App() {
   const [tab, setTab] = useState("chat");
@@ -29,7 +29,10 @@ export default function App() {
     }
 
     try {
-      const es = new EventSource("http://localhost:3000/");
+      const params = new URLSearchParams({
+        topic: prompt ?? "Server sent events",
+      });
+      const es = new EventSource(`http://localhost:3000/ai/stream?${params}`);
       eventSourceRef.current = es;
 
       es.onopen = (e: Event): void => {
@@ -86,7 +89,7 @@ export default function App() {
   }, [content]);
 
   return (
-    <div className="container mx-auto p-4 h-screen flex flex-col">
+    <div className="container mx-auto p-4 h-screen flex flex-col relative">
       <header className="py-4">
         <h1 className="text-2xl font-bold">Resumable LLM Streaming Demo</h1>
         <p className="text-gray-500">
@@ -102,10 +105,15 @@ export default function App() {
           <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="chat" className="flex-1 p-4">
+        <TabsContent value="chat" className="flex-1 p-4 flex flex-col gap-2">
           {/* <Chat /> */}
 
-          <Input value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+          <Input
+            placeholder="Enter a topic e.g - Server Side Events"
+            value={prompt}
+            className="font-mono"
+            onChange={(e) => setPrompt(e.target.value)}
+          />
           <Button
             onClick={handleStartStream}
             disabled={isStreaming}
@@ -184,6 +192,9 @@ export default function App() {
           </div>
         </TabsContent>
       </Tabs>
+      <div className="absolute top-5 right-5">
+        <ModeToggle />
+      </div>
     </div>
   );
 }
