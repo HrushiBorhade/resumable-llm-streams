@@ -39,9 +39,26 @@ const useSession = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const clearSessionId = useCallback(() => {
+    localStorage.removeItem("llm-session-id");
+    setSessionId("");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("sessionId");
+    router.replace(url.toString(), { scroll: false });
+  }, [router]);
+
+  const regenerateSessionId = () => {
+    const newSessionId = generateSessionId();
+    localStorage.setItem("llm-session-id", newSessionId);
+    setSessionId(newSessionId);
+    updateURLWithSessionId(newSessionId);
+    return newSessionId;
+  };
+
   return {
     sessionId,
-    updateURLWithSessionId,
+    clearSessionId,
+    regenerateSessionId,
   };
 };
 export default useSession;
