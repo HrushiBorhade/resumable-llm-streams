@@ -9,7 +9,10 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-kalam: var(--font-kalam);
-  --font-inter:var(--font-inter);
+  --font-inter: var(--font-inter);
+  --font-fira: var(--font-fira-mono);
+  --font-serif: var(--font-serif);
+  --font-departure: var(--font-departure-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -45,18 +48,21 @@
   --radius-xl: calc(var(--radius) + 4px);
   --animate-shiny-text: shiny-text 8s infinite;
   @keyframes shiny-text {
-  0%, 90%, 100% {
-    background-position: calc(-100% - var(--shiny-width)) 0;
+    0%,
+    90%,
+    100% {
+      background-position: calc(-100% - var(--shiny-width)) 0;
     }
-  30%, 60% {
-    background-position: calc(100% + var(--shiny-width)) 0;
+    30%,
+    60% {
+      background-position: calc(100% + var(--shiny-width)) 0;
     }
   }
 }
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
+  --background: oklch(0.8 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -90,7 +96,7 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.245 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -130,4 +136,19 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@keyframes letterFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(100%) translateX(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateX(0);
+  }
+}
+
+.animate-letter {
+  animation: letterFadeIn 1.3s cubic-bezier(0.19, 1, 0.22, 1) backwards;
 }
