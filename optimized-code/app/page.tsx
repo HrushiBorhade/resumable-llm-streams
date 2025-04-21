@@ -4,10 +4,24 @@ import Link from "next/link";
 import ThemeModeToggle from "@/components/theme/theme-toggle";
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import useSession from "@/hooks/use-session";
-import { useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+  MessageType,
+  validateMessage,
+  type ChunkMessage,
+  type MetadataMessage,
+  StreamStatus,
+} from "@/lib/message-schema";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
+class PreconditionFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PreconditionFailedError";
+  }
+}
 export default function Home() {
   const { sessionId, regenerateSessionId, clearSessionId } = useSession();
 
@@ -28,6 +42,116 @@ export default function Home() {
     }
   }, [response]);
 
+  // start stream generator
+  const { mutate, error } = useMutation({
+    mutationFn: async (newSessionId: string) => {
+      controller.current?.abort();
+      isInitialRequest.current = false;
+
+      await fetch("/api/llm-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt, sessionId: newSessionId }),
+      });
+    },
+    onSuccess: () => {
+      setStatus("streaming");
+      refetch();
+    },
+  });
+
+  const { refetch } = useQuery({
+    queryKey: ["stream", sessionId],
+    queryFn: async () => {
+      if (!sessionId) return null;
+
+      setResponse("");
+      setChunkCount(0);
+
+      const abortController = new AbortController();
+      controller.current = abortController;
+
+      const res = await fetch(`/api/check-stream?sessionId=${sessionId}`, {
+        headers: {
+          "Content-Type": "text/event-stream",
+        },
+        signal: controller.current.signal,
+      });
+
+      if (res.status === 412) {
+        throw new PreconditionFailedError("Stream not ready yet");
+      }
+      if (!res.body) return null;
+
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+
+      let streamContent = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        if (value) {
+          const messages = value.split("\n\n").filter(Boolean)
+          for (const message of messages) {
+            if (message.startsWith("data: ")) {
+              const data = message.slice(6);
+              try {
+                const parsedData = JSON.parse(data);
+                const validatedMessage = validateMessage(parsedData);
+
+                if (!validatedMessage) continue;
+
+                switch (validatedMessage.type) {
+                  case MessageType.CHUNK:
+                    const chunkMessage = validatedMessage as ChunkMessage;
+                    streamContent += chunkMessage.content;
+                    setResponse((prev) => prev + chunkMessage.content);
+                    setChunkCount((prev) => prev + 1);
+                    break;
+
+                  case MessageType.METADATA:
+                    const metadataMessage = validatedMessage as MetadataMessage;
+
+                    if (metadataMessage.status === StreamStatus.COMPLETED) {
+                      setStatus("completed");
+                    }
+                    break;
+
+                  case MessageType.ERROR:
+                    setStatus("error");
+                    break;
+                }
+              } catch (e) {
+                console.error("Failed to parse message:", e);
+              }
+            }
+          }
+        }
+      }
+      return streamContent;
+    },
+  });
+
+  const handleReset = () => {
+    setPrompt("");
+    setResponse("");
+    setChunkCount(0);
+    clearSessionId();
+    controller.current?.abort();
+    setStatus("idle");
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+
+    setStatus("loading");
+    const newSessionId = regenerateSessionId();
+    mutate(newSessionId);
+  };
+
   return (
     <div className="bg-background w-full h-screen flex items-center justify-center">
       <div className="container w-full flex flex-col justify-center items-center gap-3 mx-auto p-4">
@@ -44,7 +168,10 @@ export default function Home() {
             );
           })}
         </AnimatedShinyText>
-        <form className="w-full max-w-sm flex flex-col gap-3 ">
+        <form
+          onSubmit={handleSubmit}
+          className="w-full max-w-sm flex flex-col gap-3 "
+        >
           <Textarea
             autoFocus
             maxLength={800}
@@ -71,13 +198,13 @@ export default function Home() {
               className="flex-1"
               variant="outline"
               type="button"
-              onClick={() => null}
+              onClick={handleReset}
             >
               Reset
             </Button>
           </div>
         </form>
-        <div className="mt-8">
+        <div className="mt-8 w-full">
           <h2 className="text-xl tracking-tight font-semibold mb-2">
             Response:
           </h2>
@@ -88,8 +215,8 @@ export default function Home() {
             </div>
           ) : status === "idle" && !response ? (
             <p className="text-gray-500">
-              Enter a prompt and click "Generate Response" to see the AI's
-              response.
+              {`Enter a prompt and click "Generate Response" to see the AI's
+              response.`}
             </p>
           ) : (
             <div

@@ -1,8 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Instrument_Serif, Inter,Kalam } from "next/font/google";
+import {
+  Geist,
+  Geist_Mono,
+  Instrument_Serif,
+  Inter,
+  Kalam,
+} from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme/theme-provider";
-import localFont from 'next/font/local'
+import localFont from "next/font/local";
+import Providers from "@/providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,20 +20,20 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 const kalam = Kalam({
-    variable: "--font-kalam",
-    subsets:["devanagari"],
-    weight:["300"]
+  variable: "--font-kalam",
+  subsets: ["devanagari"],
+  weight: ["300"],
 });
 
 const instrument = Instrument_Serif({
-  subsets: ['latin'],
-  weight: '400',
-  style: ['normal', 'italic'],
-  variable: '--font-serif',
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  variable: "--font-serif",
 });
 
 const inter = Inter({
-    variable: "--font-inter",
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -37,13 +43,13 @@ export const metadata: Metadata = {
 };
 
 const FiraCode = localFont({
-  src: '../public/fonts/fira-code.woff2',
-  variable: '--font-fira-mono',
+  src: "../public/fonts/fira-code.woff2",
+  variable: "--font-fira-mono",
 });
 
 const DepartureMono = localFont({
-  src: '../public/fonts/DepartureMono-Regular.woff2',
-  variable: '--font-departure-mono',
+  src: "../public/fonts/DepartureMono-Regular.woff2",
+  variable: "--font-departure-mono",
 });
 
 export default function RootLayout({
@@ -56,14 +62,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased ${inter.variable} ${kalam.variable} ${FiraCode.variable} ${DepartureMono.variable} ${instrument.variable}`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-        </ThemeProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
