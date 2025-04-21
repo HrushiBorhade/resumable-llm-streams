@@ -1,17 +1,23 @@
 import Link from "next/link";
-import ModeToggle from "@/components/theme/theme-toggle";
+import ThemeModeToggle from "@/components/theme/theme-toggle";
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 
 export default function Home() {
   return (
     <div className="bg-background w-full h-screen flex items-center justify-center">
       <div className="container w-full flex flex-col justify-center items-center gap-3 mx-auto p-4">
-        <AnimatedShinyText className="text-4xl font-bold font-mono"> resilient-llm-streams</AnimatedShinyText>
+        <AnimatedShinyText className="text-4xl font-bold font-mono">
+          resilient-llm-streams
+        </AnimatedShinyText>
       </div>
 
+
+      {/* theme mode toggle */}
       <div className="absolute bottom-3 right-3">
-        <ModeToggle />
+        <ThemeModeToggle />
       </div>
+
+      {/* builder info */}
       <div className="absolute left-1/2 bottom-2 -translate-x-1/2">
         <div className="flex items-center justify-center gap-0.5">
           <Link
